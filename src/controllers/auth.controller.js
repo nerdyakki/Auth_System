@@ -2,6 +2,7 @@ import userModel from "../models/user.model.js";
 import crypto from "crypto";
 import jwt from "jsonwebtoken";
 import config from "../config/config.js";
+import sessionModel from "../models/session.model.js";
 export async function register(req, res) {
     const { username, email, password } = req.body;
     const isAlreadyRegistered = await userModel.findOne({
@@ -22,13 +23,6 @@ export async function register(req, res) {
         email,
         password: hashedPassword
     })
-    const accessToken = jwt.sign({
-        id: user._id
-    }, config.JWT_SECRET, 
-       {
-        expiresIn: "15m"
-       }
-    )
     const refreshToken = jwt.sign({
         id: user._id
     }, config.JWT_SECRET,
@@ -36,6 +30,22 @@ export async function register(req, res) {
          expiresIn: "7d"
         }
     )
+    const refreshTokenHash = crypto.createHash("sha256").update(refreshToken).digest("hex");
+    const session= await sessionModel.create({
+        user: user._id,
+        refreshTokenHash,
+        ip: req.ip,
+        userAgent: req.headers["user-agent"]
+    })
+    const accessToken = jwt.sign({
+        id: user._id,
+        sessionId: session._id
+    }, config.JWT_SECRET, 
+       {
+        expiresIn: "15m"
+       }
+    )
+    
     res.cookie("refreshToken", refreshToken, {
         httpOnly: true,
         secure: true, 
